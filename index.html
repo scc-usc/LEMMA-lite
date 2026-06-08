@@ -88,6 +88,12 @@
   .btn-sm { padding: 5px 12px; font-size: 0.78rem; }
   .btn-green { background: #48bb78; color: #fff; }
   .btn-green:hover { background: #38a169; }
+  .btn-load { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px;
+              background: #ebf4ff; color: #3182ce; border: 1px solid #bcd9ff; border-radius: 5px;
+              padding: 5px 10px; font-size: 0.75rem; font-weight: 600; cursor: pointer;
+              width: 100%; justify-content: center; transition: all 0.15s; }
+  .btn-load:hover:not(:disabled) { background: #d9ebff; }
+  .btn-load:disabled { opacity: 0.6; cursor: progress; }
 
   .action-bar { padding: 12px 16px; border-top: 1px solid #f0f2f5; background: #fafbfc; }
 
@@ -225,6 +231,10 @@
           <div id="hv-drop-text">Click to upload or drag &amp; drop</div>
           <input type="file" id="hv-file" accept=".csv" style="display:none">
         </div>
+        <button type="button" class="btn-load" id="load-flusight"
+                title="Fetch from the CDC FluSight forecast hub (requires internet)">
+          ⬇ Or load latest FluSight hosp admissions
+        </button>
         <div id="hv-status" style="font-size:0.75rem;margin-top:4px;color:#718096"></div>
       </div>
       <div class="form-row">
@@ -233,6 +243,11 @@
           <div id="pop-drop-text">Click to upload (optional)</div>
           <input type="file" id="pop-file" accept=".csv" style="display:none">
         </div>
+        <button type="button" class="btn-load" id="load-us-pop"
+                title="Fetch US state populations (requires internet)">
+          ⬇ Or load US states population
+        </button>
+        <div id="pop-status" style="font-size:0.75rem;margin-top:4px;color:#718096"></div>
       </div>
       <div class="form-row" id="target-row" style="display:none">
         <label>Forecast Targets</label>

@@ -40,7 +40,7 @@ function setupFileDrop(dropId, inputId, onLoad) {
   };
 }
 
-setupFileDrop('hv-drop', 'hv-file', (text, name) => {
+function onHvLoaded(text, name) {
   state.hvCsvText = text;
   state.hvFilename = name;
   document.getElementById('hv-drop-text').textContent = `✓ ${name}`;
@@ -49,7 +49,8 @@ setupFileDrop('hv-drop', 'hv-file', (text, name) => {
   updateGenerateButton();
   populateTargetSelect();
   loadAndShowHistory();
-});
+}
+setupFileDrop('hv-drop', 'hv-file', onHvLoaded);
 
 // Targets the user has checked (empty when there is no target column).
 function getSelectedTargets() {
@@ -97,14 +98,50 @@ function populateTargetSelect() {
   }
 }
 
-setupFileDrop('pop-drop', 'pop-file', (text, name) => {
+function onPopLoaded(text, name) {
   const parsed = Papa.parse(text.trim(), { header: true, skipEmptyLines: true });
   state.popDf = parsed.data;
   document.getElementById('pop-drop-text').textContent = `✓ ${name}`;
   document.getElementById('pop-drop').classList.add('has-file');
+  document.getElementById('pop-status').textContent = '';
   // Re-parse with updated population if history already loaded
   if (state.hvCsvText) loadAndShowHistory();
-});
+}
+setupFileDrop('pop-drop', 'pop-file', onPopLoaded);
+
+// --- Quick-load shortcuts (fetch CSVs from the web; require internet) ---
+const FLUSIGHT_HOSP_URL =
+  'https://raw.githubusercontent.com/cdcepi/FluSight-forecast-hub/refs/heads/main/target-data/target-hospital-admissions.csv';
+const US_POPULATION_URL =
+  'https://raw.githubusercontent.com/scc-usc/LEMMA-lite/refs/heads/main/data/us_population_data.csv';
+
+async function fetchCsvInto(url, name, btn, statusEl, onLoaded) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Loading…';
+  if (statusEl) statusEl.textContent = '';
+  try {
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+    if (!text.trim()) throw new Error('Empty response');
+    onLoaded(text, name);
+  } catch (e) {
+    if (statusEl) statusEl.textContent = `⚠ Could not load (need internet): ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+document.getElementById('load-flusight').onclick = function () {
+  fetchCsvInto(FLUSIGHT_HOSP_URL, 'FluSight hospital admissions',
+    this, document.getElementById('hv-status'), onHvLoaded);
+};
+document.getElementById('load-us-pop').onclick = function () {
+  fetchCsvInto(US_POPULATION_URL, 'US states population',
+    this, document.getElementById('pop-status'), onPopLoaded);
+};
 
 function updateGenerateButton() {
   // When the CSV has a target column, at least one target must be selected.

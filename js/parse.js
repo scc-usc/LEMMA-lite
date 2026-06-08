@@ -34,9 +34,13 @@ function parseHubverseData(csvText, locationDf, targetFilters) {
   const cols = Object.keys(rows[0] || {});
 
   // Value column — accept the common Hubverse aliases, in order of preference.
-  const valueCol = ['weekly_rate', 'observation', 'value'].find(c => cols.includes(c));
+  // Count columns ('observation'/'value') are preferred over 'weekly_rate' because
+  // the forecast target is in counts: the output must be in counts, and counts let
+  // the population file normalize by each location's actual population. 'weekly_rate'
+  // is only a flat per-100k rate, so it is used only when no count column exists.
+  const valueCol = ['observation', 'value', 'weekly_rate'].find(c => cols.includes(c));
   if (!valueCol) {
-    throw new Error("Hubverse CSV must contain a 'weekly_rate', 'observation', or 'value' " +
+    throw new Error("Hubverse CSV must contain an 'observation', 'value', or 'weekly_rate' " +
       `column. Found: ${cols.join(', ')}`);
   }
 

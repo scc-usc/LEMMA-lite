@@ -9,6 +9,7 @@ Use it online: https://lemma-lite.vercel.app/
 ## Features
 
 - **Upload** Hubverse target-data CSV  (plus an optional location/population CSV; recommended for better accuracy).
+- **One-click load** of the latest CDC FluSight hospital-admissions data and US state populations (requires internet).
 - **Approaches:** Flatline and ARIMA. **Ensembles:** Basic (quantile) and Quantile Random Forest.
 - **Multi-target** selection — pick one or more targets when the data has a `target` column.
 - **Training window (for Random Forest) & forecast origins** chosen with dual-handle sliders under the plot.
