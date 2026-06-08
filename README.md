@@ -1,8 +1,10 @@
-# 💡 LEMMA-lite Forecast
+# 💡 LEMMA-lite Forecast: No-code Super-lightweight Forecasting for Disease Time-series
 
 Derived from the more customizable [Python version](https://github.com/scc-usc/LEMMA-forecast)
 
 A browser-based [Hubverse](https://hubverse.io/) forecast generator. Everything runs entirely in browser no server/internet connection/installation required. Generate multiple versions of simple prediction models and combine them using simple ensemble or a Random Forest.
+
+Use it online: https://lemma-lite.vercel.app/
 
 ## Features
 
