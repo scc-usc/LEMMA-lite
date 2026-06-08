@@ -1,0 +1,367 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEMMA Forecast</title>
+<script src="js/libs/papaparse.min.js"></script>
+<script src="js/libs/chart.min.js"></script>
+<script src="js/libs/chartjs-plugin-zoom.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  /* Root size drives all rem-based text; bump it to enlarge the whole UI proportionally. */
+  html { font-size: 18px; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #f0f2f5; color: #1a1a2e; font-size: 0.9rem; }
+  h1 { font-size: 1.4rem; font-weight: 700; color: #1a1a2e; }
+  h2 { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+       color: #4a5568; margin-bottom: 10px; }
+  label { display: block; font-size: 0.8rem; font-weight: 600; color: #4a5568; margin-bottom: 4px; }
+  input[type=text], input[type=number], input[type=date], select, textarea {
+    width: 100%; padding: 6px 9px; border: 1px solid #cbd5e0; border-radius: 5px;
+    font-size: 0.82rem; background: #fff; color: #1a1a2e; outline: none;
+    transition: border-color 0.15s; }
+  input:focus, select:focus { border-color: #667eea; }
+  input[type=file] { padding: 4px 0; border: none; font-size: 0.8rem; }
+
+  .top-bar { display: flex; align-items: center; gap: 12px; background: #1a1a2e;
+             padding: 12px 20px; color: #fff; }
+  .top-bar .subtitle { font-size: 0.78rem; color: #a0aec0; }
+  .help-btn { margin-left: auto; background: rgba(255,255,255,0.12); color: #fff;
+              border: 1px solid rgba(255,255,255,0.25); border-radius: 6px;
+              padding: 6px 14px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+  .help-btn:hover { background: rgba(255,255,255,0.22); }
+
+  /* Help modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+                   display: none; align-items: center; justify-content: center; z-index: 100;
+                   padding: 20px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #fff; border-radius: 10px; max-width: 720px; width: 100%;
+           max-height: 85vh; display: flex; flex-direction: column; overflow: hidden;
+           box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+  .modal-head { display: flex; align-items: center; padding: 14px 20px;
+                border-bottom: 1px solid #e2e8f0; }
+  .modal-head h2 { margin: 0; font-size: 1rem; }
+  .modal-close { margin-left: auto; background: none; border: none; font-size: 1.4rem;
+                 line-height: 1; cursor: pointer; color: #718096; }
+  .modal-close:hover { color: #1a1a2e; }
+  .modal-body { padding: 18px 22px; overflow-y: auto; font-size: 0.9rem; line-height: 1.5; }
+  .modal-body h3 { font-size: 0.95rem; margin: 16px 0 6px; color: #2d3748; }
+  .modal-body h3:first-child { margin-top: 0; }
+  .modal-body ul, .modal-body ol { margin: 4px 0 4px 20px; }
+  .modal-body li { margin-bottom: 4px; }
+  .modal-body table { border-collapse: collapse; width: 100%; margin: 6px 0; font-size: 0.84rem; }
+  .modal-body th, .modal-body td { border: 1px solid #e2e8f0; padding: 5px 8px; text-align: left; }
+  .modal-body th { background: #f7fafc; }
+  .modal-body code { background: #edf2f7; padding: 1px 5px; border-radius: 4px; font-size: 0.85em; }
+
+  .layout { display: grid; grid-template-columns: 360px 1fr; height: calc(100vh - 50px); }
+
+  .sidebar { background: #fff; border-right: 1px solid #e2e8f0; overflow-y: auto; padding: 0; }
+  .sidebar-section { padding: 14px 16px; border-bottom: 1px solid #f0f2f5; }
+
+  .main-panel { display: flex; flex-direction: column; overflow: hidden; }
+
+  .form-row { margin-bottom: 10px; }
+  .form-row-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+
+  .badge { display: inline-block; background: #ebf4ff; color: #3182ce;
+           font-size: 0.7rem; padding: 1px 6px; border-radius: 9px; }
+  .badge-success { background: #f0fff4; color: #276749; }
+  .badge-warn { background: #fffbeb; color: #744210; }
+
+  .file-drop { border: 2px dashed #cbd5e0; border-radius: 7px; padding: 10px 12px;
+               text-align: center; cursor: pointer; transition: border-color 0.15s;
+               font-size: 0.78rem; color: #718096; }
+  .file-drop:hover { border-color: #667eea; color: #667eea; }
+  .file-drop.has-file { border-color: #48bb78; background: #f0fff4; color: #276749; }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px;
+         border: none; border-radius: 6px; font-size: 0.85rem; font-weight: 600;
+         cursor: pointer; transition: all 0.15s; }
+  .btn-primary { background: #667eea; color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: #5a6fd6; }
+  .btn-primary:disabled { background: #a0aec0; cursor: not-allowed; }
+  .btn-secondary { background: #fff; color: #4a5568; border: 1px solid #cbd5e0; }
+  .btn-secondary:hover { background: #f7fafc; }
+  .btn-sm { padding: 5px 12px; font-size: 0.78rem; }
+  .btn-green { background: #48bb78; color: #fff; }
+  .btn-green:hover { background: #38a169; }
+
+  .action-bar { padding: 12px 16px; border-top: 1px solid #f0f2f5; background: #fafbfc; }
+
+  .status-bar { padding: 8px 16px; background: #edf2ff; border-bottom: 1px solid #c3d1f9;
+                font-size: 0.8rem; color: #3730a3; display: none; }
+  .status-bar.error { background: #fff5f5; border-color: #fc8181; color: #c53030; }
+  .status-bar.success { background: #f0fff4; border-color: #68d391; color: #276749; }
+
+  .progress-wrap { padding: 0 16px 6px; display: none; }
+  .progress { height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden; }
+  .progress-bar { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2);
+                  transition: width 0.2s; }
+
+  .chart-area { flex: 1; padding: 14px 18px; overflow: hidden; display: flex;
+                flex-direction: column; gap: 10px; }
+  .chart-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .chart-wrap { flex: 1; min-height: 0; position: relative; }
+  .ranges { display: flex; flex-direction: column; gap: 12px; padding: 8px 2px 2px; }
+  .range-cap { font-size: 0.75rem; font-weight: 600; color: #4a5568; margin-bottom: 6px; }
+  .range-cap span { font-weight: 400; color: #667eea; }
+  .dual { position: relative; width: 100%; height: 18px; }
+  .dual .dtrack, .dual .dfill { position: absolute; top: 7px; height: 4px; border-radius: 2px; pointer-events: none; }
+  .dual .dtrack { left: 0; width: 100%; background: #e2e8f0; }
+  .dual .dfill { background: #667eea; }
+  .dual input[type=range] {
+    position: absolute; left: 0; top: 0; width: 100%; height: 18px; margin: 0;
+    background: none; pointer-events: none; -webkit-appearance: none; appearance: none; }
+  .dual input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; pointer-events: auto;
+    height: 16px; width: 16px; border-radius: 50%; background: #667eea;
+    border: 2px solid #fff; box-shadow: 0 0 0 1px #cbd5e0; cursor: pointer; }
+  .dual input[type=range]::-moz-range-thumb {
+    pointer-events: auto; height: 14px; width: 14px; border-radius: 50%;
+    background: #667eea; border: 2px solid #fff; cursor: pointer; }
+  .dual input[type=range]::-webkit-slider-runnable-track { background: none; border: none; }
+  .dual input[type=range]::-moz-range-track { background: none; border: none; }
+
+  .results-info { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .info-chip { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 5px;
+               padding: 3px 9px; font-size: 0.75rem; color: #4a5568; }
+
+  .checkbox-row { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; }
+  .checkbox-row input[type=checkbox] { width: auto; margin: 0; }
+
+  #hyperparams-container .form-row { margin-bottom: 8px; }
+  select[id=approach], select[id=ensemble] { font-weight: 600; }
+
+  .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center;
+                 justify-content: center; color: #a0aec0; gap: 12px; }
+  .empty-state .icon { font-size: 3rem; }
+  .empty-state p { font-size: 0.85rem; text-align: center; max-width: 280px; }
+
+  @media (max-width: 700px) {
+    /* Stack the sidebar above the plot and let the page scroll, instead of hiding the plot. */
+    .layout { grid-template-columns: 1fr; height: auto; }
+    .sidebar { border-right: none; border-bottom: 1px solid #e2e8f0; }
+    .main-panel { overflow: visible; }
+    .chart-area { overflow: visible; }
+    /* Chart.js needs an explicit height here since the flex container no longer has one. */
+    .chart-wrap { height: 60vh; min-height: 320px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>💡 LEMMA Forecast</h1>
+  <span class="subtitle">Browser-based Hubverse forecast generator</span>
+  <button class="help-btn" id="help-btn" title="Help">❔ Help</button>
+</div>
+
+<!-- HELP MODAL -->
+<div class="modal-overlay" id="help-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="modal-head">
+      <h2 id="help-title">💡 LEMMA Forecast — Help</h2>
+      <button class="modal-close" id="help-close" title="Close" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p>A browser-based <strong>Hubverse</strong> forecast generator. Everything runs entirely in
+         your browser — no server and no internet connection required. Generate multiple versions of simple prediction models and combine them using simple ensemble or a Random Forest</p>
+
+      <h3>Features</h3>
+      <ul>
+        <li><strong>Upload</strong> a Hubverse target-data CSV (plus an optional location/population CSV; recommended for better accuracy).</li>
+        <li><strong>Approaches:</strong> Flatline and ARIMA. <strong>Ensembles:</strong> Basic (quantile) and Quantile Random Forest.</li>
+        <li><strong>Multi-target</strong> selection when the data has a <code>target</code> column.</li>
+        <li><strong>Training window (for Random Forest) &amp; forecast origins</strong> set with the dual sliders under the plot.</li>
+        <li><strong>Interactive chart</strong> — zoom (wheel / drag), pan (Ctrl + drag), and click any point to set the forecast origin.</li>
+        <li><strong>Download</strong> the result as a Hubverse quantile CSV.</li>
+      </ul>
+
+      <h3>Quick start</h3>
+      <ol>
+        <li>Upload your <strong>Hubverse target data CSV</strong>.</li>
+        <li><em>(Optional)</em> upload a <strong>location / population CSV</strong> to convert counts to rates.</li>
+        <li>Choose the <strong>target(s)</strong>, <strong>approach</strong>, <strong>ensemble</strong>, <strong>weeks ahead</strong>, and <strong>quantiles</strong>.</li>
+        <li>Adjust the <strong>training window (for Random Forest)</strong> and <strong>forecast origin</strong> sliders.</li>
+        <li>Click <strong>Generate Forecast</strong>, review the chart, then <strong>Download CSV</strong>.</li>
+      </ol>
+
+      <h3>Input format</h3>
+      <p>Hubverse target data CSV (one observation per location per week):</p>
+      <table>
+        <tr><th>Column</th><th>Required</th><th>Notes</th></tr>
+        <tr><td><code>location</code></td><td>Yes</td><td>Location code/name.</td></tr>
+        <tr><td><code>target_end_date</code> or <code>date</code></td><td>Yes</td><td>Weekly date of the observation.</td></tr>
+        <tr><td><code>observation</code> / <code>weekly_rate</code> / <code>value</code></td><td>Yes</td><td>The observed value.</td></tr>
+        <tr><td><code>target</code></td><td>Optional</td><td>If present, choose target(s) in the UI; if absent, all data is treated as a single implicit target.</td></tr>
+      </table>
+      <p>Population CSV <em>(optional)</em>: columns <code>location_name</code> and <code>population</code>.</p>
+
+      <h3>Output</h3>
+      <p>A Hubverse quantile forecast with columns: <code>origin_date</code>, <code>horizon</code>,
+         <code>location</code>, <code>target</code> <em>(multi-target runs only)</em>,
+         <code>output_type</code> (<code>quantile</code>), <code>output_type_id</code> (the quantile level),
+         and <code>value</code>.</p>
+
+      <h3>Offline use</h3>
+      <p>Download the files from the <a href="https://github.com/scc-usc/lemma-lite" target="_blank">LEMMA-lite GitHub repository</a>.</p>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- SIDEBAR: configuration -->
+  <aside class="sidebar">
+
+    <div class="sidebar-section">
+      <h2>Data Input</h2>
+      <div class="form-row">
+        <label>Hubverse Target Data (CSV) <span style="color:#e53e3e">*</span></label>
+        <div class="file-drop" id="hv-drop" onclick="document.getElementById('hv-file').click()">
+          <div id="hv-drop-text">Click to upload or drag &amp; drop</div>
+          <input type="file" id="hv-file" accept=".csv" style="display:none">
+        </div>
+        <div id="hv-status" style="font-size:0.75rem;margin-top:4px;color:#718096"></div>
+      </div>
+      <div class="form-row">
+        <label>Location / Population Data (optional)</label>
+        <div class="file-drop" id="pop-drop" onclick="document.getElementById('pop-file').click()">
+          <div id="pop-drop-text">Click to upload (optional)</div>
+          <input type="file" id="pop-file" accept=".csv" style="display:none">
+        </div>
+      </div>
+      <div class="form-row" id="target-row" style="display:none">
+        <label>Forecast Targets</label>
+        <div id="target-checkboxes"
+             style="display:flex; flex-direction:column; gap:5px; max-height:160px; overflow-y:auto;
+                    border:1px solid #e2e8f0; border-radius:5px; padding:7px 9px;"></div>
+        <div id="target-note" style="font-size:0.72rem; color:#a0aec0; margin-top:4px;"></div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h2>Forecast Settings</h2>
+      <div class="form-row-inline">
+        <div>
+          <label>Approach</label>
+          <select id="approach">
+            <option value="Flatline">Flatline</option>
+            <option value="ARIMA" selected>ARIMA</option>
+          </select>
+        </div>
+        <div>
+          <label>Ensemble</label>
+          <select id="ensemble">
+            <option value="Basic">Basic</option>
+            <option value="Random Forest" selected>Random Forest</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Weeks Ahead</label>
+        <input type="number" id="weeks-ahead" value="4" min="1" max="26">
+      </div>
+      <div class="form-row">
+        <label>Quantiles <span style="color:#a0aec0;font-weight:400">(comma-separated, 0–1)</span></label>
+        <input type="text" id="quantiles" value="0.025, 0.1, 0.25, 0.5, 0.75, 0.9, 0.975">
+      </div>
+    </div>
+
+    <div class="sidebar-section" id="hyperparams-section">
+      <h2>Hyperparameters</h2>
+      <div id="hyperparams-container"></div>
+    </div>
+
+    <div class="sidebar-section" id="rf-settings-section">
+      <h2>RF Settings</h2>
+      <div class="form-row-inline">
+        <div><label>Trees</label><input type="number" id="rf-trees" value="30" min="5" max="200"></div>
+        <div><label>Max Depth</label><input type="number" id="rf-depth" value="6" min="2" max="15"></div>
+      </div>
+      <div class="form-row">
+        <label>Max training rows <span style="color:#667eea" id="rf-sample-label">500</span></label>
+        <input type="range" id="rf-sample" min="200" max="5000" step="100" value="500"
+               style="width:100%; padding:0;">
+        <div style="font-size:0.72rem; color:#a0aec0; margin-top:3px;">
+          If training has more rows than this, a random sample is used (faster). Drag fully right for no limit.
+        </div>
+      </div>
+    </div>
+
+    <div class="action-bar">
+      <button class="btn btn-primary" id="generate-btn" disabled style="width:100%">
+        Generate Forecast
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- MAIN: output -->
+  <main class="main-panel">
+    <div class="status-bar" id="status-bar"></div>
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
+    </div>
+
+    <div class="chart-area" id="chart-area">
+      <div class="empty-state" id="empty-state">
+        <div class="icon">📂</div>
+        <p>Upload a Hubverse CSV and configure the settings, then click <strong>Generate Forecast</strong>.</p>
+      </div>
+
+      <div id="results-container" style="display:none; flex:1; flex-direction:column; gap:10px;">
+        <div class="chart-controls">
+          <div class="results-info" id="results-info"></div>
+          <div style="margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <label style="margin:0; white-space:nowrap;">Location:</label>
+            <select id="loc-select" style="width:200px"></select>
+            <label style="margin:0; white-space:nowrap;" id="origin-label" style="display:none">Origin:</label>
+            <select id="origin-select" style="width:140px; display:none"></select>
+            <button class="btn btn-secondary btn-sm" id="reset-zoom-btn" title="Reset zoom (or double-click the chart)">⤢ Reset zoom</button>
+            <button class="btn btn-green btn-sm" id="download-btn" style="display:none">⬇ Download CSV</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="forecast-chart"></canvas>
+        </div>
+        <div class="ranges" id="ranges" style="display:none">
+          <div class="range-block">
+            <div class="range-cap">Training window: <span id="train-range-label"></span></div>
+            <div class="dual">
+              <div class="dtrack"></div>
+              <div class="dfill" id="train-fill"></div>
+              <input type="range" id="train-from" min="0" max="0" value="0">
+              <input type="range" id="train-to" min="0" max="0" value="0">
+            </div>
+          </div>
+          <div class="range-block">
+            <div class="range-cap">Forecast origins: <span id="origin-range-label"></span></div>
+            <div class="dual">
+              <div class="dtrack"></div>
+              <div class="dfill" id="origin-fill"></div>
+              <input type="range" id="origin-from" min="0" max="0" value="0">
+              <input type="range" id="origin-to" min="0" max="0" value="0">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+
+<script src="js/math.js"></script>
+<script src="js/preprocess.js"></script>
+<script src="js/parse.js"></script>
+<script src="js/windows.js"></script>
+<script src="js/approaches.js"></script>
+<script src="js/ensemble.js"></script>
+<script src="js/pipeline.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
