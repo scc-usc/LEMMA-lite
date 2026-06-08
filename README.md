@@ -16,7 +16,7 @@ A browser-based [Hubverse](https://hubverse.io/) forecast generator. Everything 
 
 ## Quick start
 
-1. Open `forecast.html` in a browser (or from ).
+1. Open `index.html` in a browser (or from ).
 2. Upload your **Hubverse target data CSV**.
 3. *(Optional)* upload a **location / population CSV** to normalize counts/rates across locations.
 4. Choose the **target(s)**, **approach**, **ensemble**, **weeks ahead**, and **quantiles**.
@@ -44,7 +44,7 @@ A Hubverse quantile forecast with columns: `origin_date`, `horizon`, `location`,
 
 ## Offline use
 
-Download the files this GitHub repository and run `forecast.html`.
+Download the files this GitHub repository and run `index.html`.
 
 
 
