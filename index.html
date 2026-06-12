@@ -258,6 +258,15 @@
                     border:1px solid #e2e8f0; border-radius:5px; padding:7px 9px;"></div>
         <div id="target-note" style="font-size:0.72rem; color:#a0aec0; margin-top:4px;"></div>
       </div>
+
+      <div class="form-row">
+        <label>Data Granularity</label>
+        <select id="granularity">
+          <option value="weekly" selected>Weekly</option>
+          <option value="daily">Daily</option>
+          <option value="daily-to-weekly">Daily → aggregate to weekly</option>
+        </select>
+      </div>
     </div>
 
     <div class="sidebar-section">
@@ -278,14 +287,7 @@
           </select>
         </div>
       </div>
-      <div class="form-row">
-        <label>Data Granularity</label>
-        <select id="granularity">
-          <option value="weekly" selected>Weekly</option>
-          <option value="daily">Daily</option>
-          <option value="daily-to-weekly">Daily → aggregate to weekly</option>
-        </select>
-      </div>
+      
       <div class="form-row">
         <label id="weeks-ahead-label">Weeks Ahead</label>
         <input type="number" id="weeks-ahead" value="4" min="1" max="52">
