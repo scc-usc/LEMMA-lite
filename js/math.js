@@ -1,9 +1,10 @@
 // 1. MATH UTILITIES
 // ============================================================
 
-// The whole tool assumes a WEEKLY cadence: one timestep = one week. The only place
-// weeks touch calendar days is date parsing/labelling, which uses this constant.
-const STEP_DAYS = 7;
+// Days per analysis timestep. Set from the "Data Granularity" control: 7 for weekly
+// (and daily-to-weekly, where daily rows are first aggregated into weeks) or 1 for
+// daily. The only place steps touch calendar days is date parsing/labelling.
+let STEP_DAYS = 7;
 
 function cumsum1D(arr) {
   const out = new Float64Array(arr.length);

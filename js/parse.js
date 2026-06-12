@@ -25,7 +25,12 @@ function listHubverseTargets(csvText) {
 // `targetFilters` may be an array of selected targets (or a single string). When
 // the data has a target column, the selection picks which targets to forecast;
 // multiple selections are kept as separate `location__target` series.
-function parseHubverseData(csvText, locationDf, targetFilters) {
+//
+// `granularity` is 'weekly' (default), 'daily', or 'daily-to-weekly'. For
+// 'daily-to-weekly' each observation date is snapped to its week-ending Saturday so
+// that daily rows aggregate into weekly (MMWR) bins; the caller sets STEP_DAYS to
+// match (7 for weekly/daily-to-weekly, 1 for daily).
+function parseHubverseData(csvText, locationDf, targetFilters, granularity) {
   const parsed = Papa.parse(csvText.trim(), {
     header: true, skipEmptyLines: true, dynamicTyping: false
   });
@@ -92,6 +97,16 @@ function parseHubverseData(csvText, locationDf, targetFilters) {
   // Parse dates
   rows = rows.map(r => ({ ...r, _date: new Date(r.target_end_date) }))
              .filter(r => !isNaN(r._date));
+
+  // Daily-to-weekly: snap each date to its week-ending Saturday (MMWR convention) so
+  // that all days in a week collapse onto one weekly bin and get summed below.
+  if (granularity === 'daily-to-weekly') {
+    for (const r of rows) {
+      const d = r._date;
+      const addDays = (6 - d.getUTCDay() + 7) % 7; // days forward to the next Saturday
+      r._date = new Date(d.getTime() + addDays * 86400000);
+    }
+  }
 
   if (!rows.length) {
     throw new Error("No valid rows in Hubverse CSV after filtering. Check that " +

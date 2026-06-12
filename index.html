@@ -181,6 +181,8 @@
         <li><strong>Upload</strong> a Hubverse target-data CSV (plus an optional location/population CSV; recommended for better accuracy).</li>
         <li><strong>Approaches:</strong> Flatline and ARIMA. <strong>Ensembles:</strong> Basic (quantile) and Quantile Random Forest.</li>
         <li><strong>Multi-target</strong> selection when the data has a <code>target</code> column.</li>
+        <li><strong>Data granularity:</strong> weekly, daily, or daily aggregated to weekly (MMWR weeks).</li>
+        <li><strong>Clip negative forecasts</strong> to zero (on by default), at both predictor and ensemble levels.</li>
         <li><strong>Training window (for Random Forest) &amp; forecast origins</strong> set with the dual sliders under the plot.</li>
         <li><strong>Interactive chart</strong> — zoom (wheel / drag), pan (Ctrl + drag), and click any point to set the forecast origin.</li>
         <li><strong>Download</strong> the result as a Hubverse quantile CSV.</li>
@@ -277,12 +279,26 @@
         </div>
       </div>
       <div class="form-row">
-        <label>Weeks Ahead</label>
-        <input type="number" id="weeks-ahead" value="4" min="1" max="26">
+        <label>Data Granularity</label>
+        <select id="granularity">
+          <option value="weekly" selected>Weekly</option>
+          <option value="daily">Daily</option>
+          <option value="daily-to-weekly">Daily → aggregate to weekly</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label id="weeks-ahead-label">Weeks Ahead</label>
+        <input type="number" id="weeks-ahead" value="4" min="1" max="52">
       </div>
       <div class="form-row">
         <label>Quantiles <span style="color:#a0aec0;font-weight:400">(comma-separated, 0–1)</span></label>
         <input type="text" id="quantiles" value="0.025, 0.1, 0.25, 0.5, 0.75, 0.9, 0.975">
+      </div>
+      <div class="form-row">
+        <label class="checkbox-row">
+          <input type="checkbox" id="clip-negative" checked>
+          Clip negative forecasts to zero
+        </label>
       </div>
     </div>
 

@@ -150,6 +150,18 @@ function updateGenerateButton() {
   document.getElementById('generate-btn').disabled = !(state.hvCsvText && targetOk);
 }
 
+// Reads the Data Granularity control, sets the global analysis timestep (STEP_DAYS),
+// updates step-unit wording, and returns the granularity string. Call before parsing.
+let STEP_UNIT = 'week'; // 'week' or 'day' — for UI labels
+function applyGranularity() {
+  const g = document.getElementById('granularity').value;
+  STEP_DAYS = (g === 'daily') ? 1 : 7;            // daily-to-weekly aggregates to weeks
+  STEP_UNIT = (g === 'daily') ? 'day' : 'week';
+  document.getElementById('weeks-ahead-label').textContent =
+    (STEP_UNIT === 'day') ? 'Days Ahead' : 'Weeks Ahead';
+  return g;
+}
+
 function loadAndShowHistory() {
   const targets = getSelectedTargets();
   const hasTargetCol = document.querySelectorAll('#target-checkboxes input[type=checkbox]').length > 0;
@@ -160,8 +172,9 @@ function loadAndShowHistory() {
   }
   document.getElementById('hv-status').textContent = '';
   try {
+    const granularity = applyGranularity();
     const { hospRaw, popu, stateAbbr, zeroDate } =
-      parseHubverseData(state.hvCsvText, state.popDf, targets);
+      parseHubverseData(state.hvCsvText, state.popDf, targets, granularity);
     const { hospDat, hospCumuSOrig } = preprocessHospData(hospRaw);
     // Store in state (no forecast yet)
     state.hospDat      = hospDat;
@@ -188,7 +201,7 @@ function loadAndShowHistory() {
     // Show the results panel with history-only chart
     document.getElementById('results-info').innerHTML =
       `<span class="info-chip">📍 ${stateAbbr.length} location${stateAbbr.length > 1 ? 's' : ''}</span>` +
-      `<span class="info-chip">📅 ${hospDat[0].length} weeks of data</span>` +
+      `<span class="info-chip">📅 ${hospDat[0].length} ${STEP_UNIT}${hospDat[0].length > 1 ? 's' : ''} of data</span>` +
       `<span class="info-chip badge">Upload complete — run forecast to add predictions</span>`;
     document.getElementById('empty-state').style.display = 'none';
     document.getElementById('results-container').style.display = 'flex';
@@ -335,6 +348,7 @@ async function runForecast() {
     // Rightmost slider position means "no limit" (Infinity); otherwise cap training rows.
     const rfMaxSample    = (parseInt(rfSampleEl.value) >= parseInt(rfSampleEl.max))
       ? Infinity : (parseInt(rfSampleEl.value) || 1000);
+    const clipNegative   = document.getElementById('clip-negative').checked;
 
     if (!quantiles.length) throw new Error('Enter at least one valid quantile in [0,1].');
 
@@ -342,8 +356,9 @@ async function runForecast() {
     if (hasTargetCol && !targets.length) throw new Error('Select at least one target to forecast.');
 
     // --- Parse Hubverse CSV ---
+    const granularity = applyGranularity();
     const { hospRaw, popu, stateAbbr, zeroDate } =
-      parseHubverseData(state.hvCsvText, state.popDf, targets);
+      parseHubverseData(state.hvCsvText, state.popDf, targets, granularity);
 
     setProgress(0.05);
     setStatus('Preprocessing data…');
@@ -375,7 +390,7 @@ async function runForecast() {
     const config = {
       approachName, ensembleName, weeksAhead, quantiles,
       retroLookback, trainLookback, testLookback,
-      nWeeks, zeroDate, stateAbbr, rfTrees, rfDepth, rfMaxSample
+      nWeeks, zeroDate, stateAbbr, rfTrees, rfDepth, rfMaxSample, clipNegative
     };
 
     // --- Build scenarios ---
@@ -468,7 +483,7 @@ function renderResults(predRows, stateAbbr, weeksAhead, quantiles) {
   document.getElementById('results-info').innerHTML =
     `<span class="info-chip">📍 ${nLoc} location${nLoc > 1 ? 's' : ''}</span>` +
     `<span class="info-chip">📅 ${allOrigins.length} origin${allOrigins.length > 1 ? 's' : ''}</span>` +
-    `<span class="info-chip">📈 ${weeksAhead} week${weeksAhead > 1 ? 's' : ''} ahead</span>` +
+    `<span class="info-chip">📈 ${weeksAhead} ${STEP_UNIT}${weeksAhead > 1 ? 's' : ''} ahead</span>` +
     `<span class="info-chip">📊 ${predRows.length} rows</span>`;
 
   document.getElementById('download-btn').style.display = '';
@@ -762,6 +777,12 @@ document.getElementById('reset-zoom-btn').onclick = () => {
 document.getElementById('forecast-chart').addEventListener('dblclick', () => {
   if (state.chart && state.chart.resetZoom) state.chart.resetZoom();
 });
+
+// --- Data granularity: re-parse and re-plot the history when it changes ---
+document.getElementById('granularity').onchange = () => {
+  applyGranularity();
+  if (state.hvCsvText) loadAndShowHistory();
+};
 
 // --- Help modal ---
 (() => {

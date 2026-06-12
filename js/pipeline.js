@@ -52,6 +52,8 @@ async function generateAllPredictors(hospCumuSOrig, hospDat, scenarios, config, 
         const out = new Float64Array(weeksAhead);
         out[0] = locRow[0];
         for (let h = 1; h < weeksAhead; h++) out[h] = locRow[h] - locRow[h - 1];
+        // Predictor-level clip: a forecast for a period should not be negative.
+        if (config.clipNegative) for (let h = 0; h < weeksAhead; h++) if (out[h] < 0) out[h] = 0;
         return out;
       })
     );
@@ -169,7 +171,9 @@ async function generatePredsRF(allPreds, hospDat, popu, config, quantiles, progr
       for (let wa = 0; wa < weeksAhead; wa++) {
         const rf = forests[wa];
         for (let qi = 0; qi < quantiles.length; qi++) {
-          qPred[wa][qi] = rf ? rf.predictQuantile(xRow, quantiles[qi]) * popu[loc] : 0;
+          let v = rf ? rf.predictQuantile(xRow, quantiles[qi]) * popu[loc] : 0;
+          if (config.clipNegative && v < 0) v = 0; // ensemble-level clip
+          qPred[wa][qi] = v;
         }
       }
       allTestPreds.set(`${lb},${loc}`, qPred);
@@ -200,6 +204,10 @@ async function generatePredsBasic(allPreds, hospDat, popu, config, quantiles, pr
         pLoc.map(scenRow => scenRow[w] || 0)
       );
       const qPred = basicEnsemblePredict(Xw, quantiles);
+      // Ensemble-level clip: keep quantile forecasts non-negative.
+      if (config.clipNegative) {
+        for (const row of qPred) for (let i = 0; i < row.length; i++) if (row[i] < 0) row[i] = 0;
+      }
       allTestPreds.set(`${lb},${loc}`, qPred);
       done++;
     }
