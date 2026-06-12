@@ -39,19 +39,49 @@ function smoothEpidata(matrix, smoothFactor = 14) {
   });
 }
 
-// Preprocessing for weekly data.
-// hospRaw: (nLoc, nWeeks) weekly values (one point per week per location).
+// Linearly interpolate missing (NaN) entries of a 1D series. Interior gaps are filled
+// along the straight line between the nearest present points on either side; leading/
+// trailing gaps are filled with the nearest present value. Returns the filled copy and
+// a boolean mask flagging which positions were missing (interpolated).
+function interpolateMissing(row) {
+  const n = row.length;
+  const out = Float64Array.from(row);
+  const missing = new Array(n).fill(false);
+  for (let t = 0; t < n; t++) if (!isFinite(out[t])) missing[t] = true;
+  for (let t = 0; t < n; t++) {
+    if (!missing[t]) continue;
+    let prev = -1, next = -1;
+    for (let j = t - 1; j >= 0; j--) if (!missing[j]) { prev = j; break; }
+    for (let j = t + 1; j < n; j++) if (!missing[j]) { next = j; break; }
+    if (prev >= 0 && next >= 0) out[t] = out[prev] + (out[next] - out[prev]) * (t - prev) / (next - prev);
+    else if (prev >= 0) out[t] = out[prev];
+    else if (next >= 0) out[t] = out[next];
+    else out[t] = 0; // entirely empty series
+  }
+  return { values: out, missing };
+}
+
+// Preprocessing for the (weekly or daily) step series.
+// hospRaw: (nLoc, nSteps) values per step per location; NaN marks a missing step.
 // Returns:
-//   hospDat       — cleaned weekly values (NaN-interpolated, negatives clamped)
+//   hospDat       — cleaned values (missing steps linearly interpolated, negatives clamped)
 //   hospCumuSOrig — their running cumulative, which the forecasters difference back
-//                   to the weekly series. No additional smoothing is applied: the
-//                   data is already weekly-aggregated, so day-level smoothing (the
-//                   old factor-14 step) does not apply.
+//                   to the per-step series.
+//   hospMissing   — (nLoc, nSteps) boolean mask: true where a value was interpolated.
 function preprocessHospData(hospRaw) {
   const nWeeks = hospRaw[0].length;
 
-  // cumsum of raw → cumulative; clean it (interpolate NaN, clamp decreases to 0).
-  const cumRaw = cumsum2D(hospRaw);
+  // Interpolate missing steps in the value domain (must happen before cumsum, which
+  // would otherwise propagate NaN forward and defeat interpolation).
+  const hospMissing = [];
+  const filled = hospRaw.map(row => {
+    const { values, missing } = interpolateMissing(row);
+    hospMissing.push(missing);
+    return values;
+  });
+
+  // cumsum of filled → cumulative; clean it (clamp decreases to 0).
+  const cumRaw = cumsum2D(filled);
   const hospDatCumu = smoothEpidata(cumRaw, 1);
 
   // Cleaned weekly values = first difference of the cleaned cumulative, keeping the
@@ -64,5 +94,5 @@ function preprocessHospData(hospRaw) {
   });
 
   const hospCumuSOrig = cumsum2D(hospDat);
-  return { hospDat, hospCumuSOrig };
+  return { hospDat, hospCumuSOrig, hospMissing };
 }

@@ -136,16 +136,23 @@ function parseHubverseData(csvText, locationDf, targetFilters, granularity) {
   const nLoc = rowOrder.length;
   const rowIdx = Object.fromEntries(rowOrder.map((id, i) => [id, i]));
 
-  // Build matrix (nLoc, nWeeks) initialized to 0; each observation maps to its week.
+  // Build matrix (nLoc, nWeeks); each observation maps to its step. Bins that receive
+  // no observation are left as NaN (missing) so they get interpolated downstream
+  // rather than being treated as a real zero.
   const hospRaw = Array.from({ length: nLoc }, () => new Float64Array(nWeeks));
+  const counts  = Array.from({ length: nLoc }, () => new Uint32Array(nWeeks));
   const minDateTs = minDate.getTime();
   for (const r of rows) {
     const locI = rowIdx[r.row_id];
     const wI = Math.round((r._date.getTime() - minDateTs) / stepMs);
     if (locI !== undefined && wI >= 0 && wI < nWeeks) {
-      hospRaw[locI][wI] += r[valueCol]; // sum if multiple rows fall in the same week
+      hospRaw[locI][wI] += r[valueCol]; // sum if multiple rows fall in the same step
+      counts[locI][wI] += 1;
     }
   }
+  for (let i = 0; i < nLoc; i++)
+    for (let w = 0; w < nWeeks; w++)
+      if (counts[i][w] === 0) hospRaw[i][w] = NaN; // no data → missing
 
   // Population
   const baseLocations = rowOrder.map(id => id.split('__')[0]);

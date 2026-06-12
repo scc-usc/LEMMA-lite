@@ -4,7 +4,7 @@
 let state = {
   hvCsvText: null, popDf: null,
   hvFilename: '', predRows: null,
-  hospDat: null, hospCumuSOrig: null, stateAbbr: null, popu: null, zeroDate: null,
+  hospDat: null, hospCumuSOrig: null, hospMissing: null, stateAbbr: null, popu: null, zeroDate: null,
   chart: null, _chartLoc: null, _chartKind: null, _chartCtx: null,
 };
 
@@ -175,10 +175,11 @@ function loadAndShowHistory() {
     const granularity = applyGranularity();
     const { hospRaw, popu, stateAbbr, zeroDate } =
       parseHubverseData(state.hvCsvText, state.popDf, targets, granularity);
-    const { hospDat, hospCumuSOrig } = preprocessHospData(hospRaw);
+    const { hospDat, hospCumuSOrig, hospMissing } = preprocessHospData(hospRaw);
     // Store in state (no forecast yet)
     state.hospDat      = hospDat;
     state.hospCumuSOrig = hospCumuSOrig;
+    state.hospMissing  = hospMissing;
     state.stateAbbr    = stateAbbr;
     state.popu         = popu;
     state.zeroDate     = zeroDate;
@@ -214,14 +215,14 @@ function loadAndShowHistory() {
 
 // --- Range sliders (under the plot) ---
 // Two dual-handle ranges, both chosen by the user:
-//   training window  (default: MIN_HISTORY_WEEKS .. last observed week)
-//   forecast origins (default: last observed week .. last observed week)
-function setupRangeSliders(nWeeks, zeroDate) {
-  const maxOrigin = Math.max(0, nWeeks - 1);
-  const minOrigin = Math.min(maxOrigin, MIN_HISTORY_WEEKS);
+//   training window  (default: MIN_HISTORY_STEPS .. last observed step)
+//   forecast origins (default: last observed step .. last observed step)
+function setupRangeSliders(nSteps, zeroDate) {
+  const maxOrigin = Math.max(0, nSteps - 1);
+  const minOrigin = Math.min(maxOrigin, MIN_HISTORY_STEPS);
   const dateOf = w =>
     new Date(zeroDate.getTime() + w * STEP_DAYS * 86400000).toISOString().slice(0, 10);
-  const def = defaultWindows(nWeeks);
+  const def = defaultWindows(nSteps);
 
   wireDualRange('train-from', 'train-to', 'train-fill', 'train-range-label',
     minOrigin, maxOrigin, def.startTrain, def.endTrain, dateOf);
@@ -260,10 +261,10 @@ function wireDualRange(fromId, toId, fillId, labelId, min, max, defFrom, defTo, 
 // --- Approach hyperparams UI ---
 const HYPERPARAM_DEFS = {
   'Flatline': [
-    { key: 'flat_k_list', label: 'Lag in weeks (flat_k_list)', default: '0, 1, 2', type: 'array' },
+    { key: 'flat_k_list', label: 'Lag in {unit}s (flat_k_list)', default: '0, 1, 2', type: 'array' },
   ],
   'ARIMA': [
-    { key: 'ar_p_list', label: 'AR orders in weeks (ar_p_list)', default: '2, 4', type: 'array' },
+    { key: 'ar_p_list', label: 'AR orders in {unit}s (ar_p_list)', default: '2, 4', type: 'array' },
     { key: 'd_list', label: 'Differencing orders (d_list)', default: '0, 1, 2', type: 'array' },
   ],
 };
@@ -276,7 +277,7 @@ function renderHyperparams() {
   for (const def of defs) {
     const div = document.createElement('div');
     div.className = 'form-row';
-    div.innerHTML = `<label>${def.label}</label>
+    div.innerHTML = `<label>${def.label.replace('{unit}', STEP_UNIT)}</label>
       <input type="text" id="hp-${def.key}" value="${def.default}">`;
     container.appendChild(div);
   }
@@ -295,6 +296,7 @@ function getHyperparams() {
 }
 
 document.getElementById('approach').onchange = renderHyperparams;
+applyGranularity();   // sync STEP_DAYS/STEP_UNIT/labels with the granularity control's initial value
 renderHyperparams();
 
 // --- RF settings visibility ---
@@ -364,11 +366,11 @@ async function runForecast() {
     setStatus('Preprocessing data…');
     await new Promise(r => setTimeout(r, 0));
 
-    const { hospDat, hospCumuSOrig } = preprocessHospData(hospRaw);
+    const { hospDat, hospCumuSOrig, hospMissing } = preprocessHospData(hospRaw);
     const nWeeks = hospDat[0].length;
     const nLoc  = hospDat.length;
 
-    // --- Window computation (all in weeks) ---
+    // --- Window computation (all in timesteps) ---
     // Both windows come from the sliders under the plot (training window + forecast
     // origin range); they may overlap (the user's choice).
     const def = defaultWindows(nWeeks);
@@ -429,6 +431,7 @@ async function runForecast() {
     state.predRows = predRows;
     state.hospDat  = hospDat;
     state.hospCumuSOrig = hospCumuSOrig;
+    state.hospMissing = hospMissing;
     state.stateAbbr = stateAbbr;
     state.popu = popu;
     state.zeroDate = zeroDate;
@@ -519,9 +522,23 @@ function drawChart(locIdx) {
   const locName = stateAbbr[locIdx];
   const hasForecast = !!(state.predRows && state.predRows.length);
   const nWeeks = hospDat[locIdx].length;
-  const obs = hospDat[locIdx]; // one value per week
+  const obs = hospDat[locIdx]; // one value per step
   const dateOf = w =>
     new Date(zeroDate.getTime() + w * STEP_DAYS * 86400000).toISOString().slice(0, 10);
+
+  // Interpolated (originally-missing) steps are shown in a distinct colour, and the
+  // tooltip says "Interpolated" instead of "Observed" for them.
+  const OBS_COLOR = '#4a5568', INTERP_COLOR = '#dd6b20';
+  const missing = state.hospMissing ? state.hospMissing[locIdx] : null;
+  const isInterp = (i) => !!(missing && missing[i]);
+  const obsPointColors = (n) => Array.from({ length: n }, (_, i) => isInterp(i) ? INTERP_COLOR : OBS_COLOR);
+  const obsSegmentColor = (ctx) =>
+    (isInterp(ctx.p0DataIndex) || isInterp(ctx.p1DataIndex)) ? INTERP_COLOR : OBS_COLOR;
+  const tooltipLabel = (item) => {
+    const ds = item.dataset.label || '';
+    const shown = (ds.startsWith('Observed') && isInterp(item.dataIndex)) ? 'Interpolated' : ds;
+    return `${shown}: ${item.formattedValue}`;
+  };
 
   // --- No forecast yet: show the full observed history (aligns with the sliders). ---
   if (!hasForecast) {
@@ -535,12 +552,15 @@ function drawChart(locIdx) {
       data: {
         labels: allLabels,
         datasets: [{
-          label: 'Observed (weekly)',
+          label: `Observed (${STEP_UNIT === 'day' ? 'daily' : 'weekly'})`,
           data: histSlice,
-          borderColor: '#4a5568',
+          borderColor: OBS_COLOR,
           backgroundColor: 'rgba(74,85,104,0.12)',
           pointRadius: 2, pointHoverRadius: 5,
           borderWidth: 1.5, tension: 0.1,
+          pointBackgroundColor: obsPointColors(allLabels.length),
+          pointBorderColor: obsPointColors(allLabels.length),
+          segment: { borderColor: obsSegmentColor },
         }],
       },
       options: {
@@ -550,6 +570,7 @@ function drawChart(locIdx) {
         plugins: {
           title: { display: true, text: `${locName} — observed data`, font: { size: 16 } },
           legend: { labels: { font: { size: 14 } } },
+          tooltip: { callbacks: { label: tooltipLabel } },
           zoom: ZOOM_OPTS,
         },
         scales: {
@@ -631,13 +652,16 @@ function drawChart(locIdx) {
 
   const datasets = [
     {
-      label: 'Observed (weekly)',
+      label: `Observed (${STEP_UNIT === 'day' ? 'daily' : 'weekly'})`,
       data: histData,
-      borderColor: '#4a5568',
+      borderColor: OBS_COLOR,
       backgroundColor: 'rgba(74,85,104,0.15)',
       pointRadius: 3, pointHoverRadius: 5,
       borderWidth: 1.5, tension: 0.1,
       spanGaps: false,
+      pointBackgroundColor: obsPointColors(histData.length),
+      pointBorderColor: obsPointColors(histData.length),
+      segment: { borderColor: obsSegmentColor },
     },
   ];
 
@@ -723,7 +747,8 @@ function drawChart(locIdx) {
         subtitle: { display: availableOrigins.length > 1, text: 'Tip: click a point on the line to set the forecast origin',
                     font: { size: 12, style: 'italic' }, color: '#a0aec0', padding: { bottom: 6 } },
         legend: { labels: { filter: (item) => !item.text.startsWith('_'), font: { size: 14 } } },
-        tooltip: { filter: (item) => !item.dataset.label.startsWith('_') },
+        tooltip: { filter: (item) => !item.dataset.label.startsWith('_'),
+                   callbacks: { label: tooltipLabel } },
         zoom: ZOOM_OPTS,
       },
       scales: {
@@ -778,9 +803,10 @@ document.getElementById('forecast-chart').addEventListener('dblclick', () => {
   if (state.chart && state.chart.resetZoom) state.chart.resetZoom();
 });
 
-// --- Data granularity: re-parse and re-plot the history when it changes ---
+// --- Data granularity: relabel week→day, re-render hyperparams, re-plot history ---
 document.getElementById('granularity').onchange = () => {
   applyGranularity();
+  renderHyperparams();
   if (state.hvCsvText) loadAndShowHistory();
 };
 

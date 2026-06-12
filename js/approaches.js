@@ -1,13 +1,13 @@
 // 5. FLATLINE APPROACH
 // ============================================================
 
-// Returns array of scenarios: each is { k }. k is a lag in WEEKS.
+// Returns array of scenarios: each is { k }. k is a lag in TIMESTEPS.
 function flatlineScenarios(flatKList) {
   return flatKList.map(k => ({ k: Math.round(k) }));
 }
 
-// Returns (nLoc, horizon) cumulative predicted increments from the last observed week.
-// k is the lag, in weeks, of the increment that is held flat into the future.
+// Returns (nLoc, horizon) cumulative predicted increments from the last observed step.
+// k is the lag, in timesteps, of the increment that is held flat into the future.
 function flatlineProcess(k, hospCumuS, horizon) {
   const nLoc = hospCumuS.length;
   const result = Array.from({ length: nLoc }, () => new Float64Array(horizon));
@@ -27,7 +27,7 @@ function flatlineProcess(k, hospCumuS, horizon) {
 // 6. ARIMA APPROACH (AR(p,d,0))
 // ============================================================
 
-// p is the AR order in WEEKS; d is the differencing order.
+// p is the AR order in TIMESTEPS; d is the differencing order.
 function arimaScenarios(arPList, dList) {
   const scens = [];
   for (const p of arPList) for (const d of dList) scens.push({ p: Math.round(p), d: Math.round(d) });
@@ -73,7 +73,7 @@ function _fitAR(x, p) {
   return lstsq(X, y);
 }
 
-// Returns (nLoc, horizon) cumulative predicted increments from the last observed week.
+// Returns (nLoc, horizon) cumulative predicted increments from the last observed step.
 function arimaProcess(p, d, hospCumuS, horizon) {
   const nLoc = hospCumuS.length;
   const result = Array.from({ length: nLoc }, () => new Float64Array(horizon));

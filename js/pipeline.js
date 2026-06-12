@@ -1,9 +1,10 @@
 // 9. MAIN FORECAST PIPELINE (weekly)
 // ============================================================
 //
-// One timestep = one week. Hyperparameters (flatline lag, ARIMA AR order) and all
-// windows/lookbacks are expressed in weeks. There is no binning: the forecasters
-// emit one value per week, which is exactly the forecast for that week.
+// One timestep = one data point (a week or a day, per the granularity setting; the
+// algorithm is unit-agnostic). Hyperparameters (flatline lag, ARIMA AR order) and all
+// windows/lookbacks are expressed in timesteps. The forecasters emit one value per
+// step, which is exactly the forecast for that step.
 
 function buildScenarios(approachName, hyperparams) {
   if (approachName === 'Flatline') {
